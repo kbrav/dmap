@@ -6,6 +6,7 @@ const { send, want, snapshot, revert, b32, fail} = require('minihat')
 const { expectEvent, check_gas} = require('./utils/helpers')
 const { bounds } = require('./bounds')
 const constants = ethers.constants
+const { smock } = require('@defi-wonderland/smock')
 
 const debug = require('debug')('dmap:test')
 
@@ -17,8 +18,10 @@ describe('dmap', ()=>{
     let ali, bob, cat
     let ALI, BOB, CAT
     const LOCK = '0x80'+'00'.repeat(31)
+    let signers
     before(async ()=>{
         [ali, bob, cat] = await ethers.getSigners();
+        signers = await ethers.getSigners();
         [ALI, BOB, CAT] = [ali, bob, cat].map(x => x.address)
 
         await hh.run('deploy-mock-dmap')
@@ -84,12 +87,83 @@ describe('dmap', ()=>{
         const bobval = '0x'+'22'.repeat(32)
         await send(dmap.set, b32("1"), LOCK, alival)
         await send(dmap.connect(bob).set, b32("1"), LOCK, bobval)
+        want(await dmap.get(ALI, b32("1"))).to.eql(alival)
+        want(await dmap.get(BOB, b32("1"))).to.eql(bobval)
     })
 
-    it("name in hash", async () => {
-        const val = '0x'+'11'.repeat(32)
-        await send(dmap.set, b32("1"), LOCK, val)
-        await send(dmap.set, b32("2"), LOCK, val)
+    it('name in hash', async () => {
+        const val0 = '0x'+'11'.repeat(32)
+        const val1 = '0x'+'22'.repeat(32)
+        await send(dmap.set, b32("1"), LOCK, val0)
+        await send(dmap.set, b32("2"), LOCK, val1)
+        want(await dmap.get(ALI, b32("1"))).to.eql(val0)
+        want(await dmap.get(ALI, b32("2"))).to.eql(val1)
+    })
+
+    it('name all bits in hash', async () => {
+        const names = [
+            '0x'+'ff'.repeat(32),
+            '0x'+'ff'.repeat(31)+'fe', // flip lsb
+            '0x7f'+'ff'.repeat(31), // flip msb
+        ]
+        const vals = [
+            '0x'+'11'.repeat(32),
+            '0x'+'22'.repeat(32),
+            '0x'+'33'.repeat(32),
+        ]
+        for( let i = 0; i < names.length; i++ ) {
+            await send(dmap.set, names[i], LOCK, vals[i])
+        }
+        for( let i = 0; i < names.length; i++ ) {
+            await check_entry(ALI, names[i], LOCK, vals[i])
+        }
+    })
+
+    it('zone all bits in hash', async () => {
+
+        const myFake = await smock.fake('Dmap')
+        console.log(myFake)
+
+        /*
+        const lsb = x => ethers.BigNumber.from(x).and(1).toNumber()
+        const msb = x => ethers.BigNumber.from(x).shr(20*8-1).toNumber()
+        let fliplsb = undefined
+        let flipmsb = undefined
+        const lsbali = lsb(ALI)
+        const msbali = msb(ALI)
+        want(lsbali).lt(2)
+        want(msbali).lt(2)
+        for( let i = 0; i < signers.length; i++ ) {
+            if( fliplsb != undefined && flipmsb != undefined ) {
+                console.log("BREAK")
+                break;
+            }
+            const signer = signers[i]
+            const lsbx = lsb(signer.address)
+            const msbx = msb(signer.address)
+            want(lsbx).lt(2)
+            want(msbx).lt(2)
+            console.log(signer.address, msbx, lsbx)
+            if( fliplsb == undefined && lsbx != lsbali ) {
+                console.log("GOT ANOTHER")
+                fliplsb = signer
+            }
+            if( flipmsb == undefined && msbx != msbali ) {
+                console.log("GOT ONE")
+                flipmsb = signer
+            }
+        }
+        const users = [ali, fliplsb, flipmsb]
+        const name = b32('name')
+        const val = b32('val')
+        for( let i = 0; i < users.length; i++ ) {
+            await send(dmap.connect(users[i]).set, name, LOCK, val)
+        }
+        for( let i = 0; i < users.length; i++ ) {
+            await check_entry(users[i].address, name, LOCK, val)
+        }
+
+         */
     })
 
     describe('lock', () => {

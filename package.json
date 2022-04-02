@@ -4,6 +4,7 @@
     "test": "npx mocha test"
   },
   "devDependencies": {
+    "@defi-wonderland/smock": "github:defi-wonderland/smock",
     "@etherpacks/dpack": "^0.0.27",
     "@nomiclabs/hardhat-ethers": "^2.0.5",
     "@types/mocha": "^9.0.0",

@@ -6,7 +6,7 @@ const ethers = hh.ethers
 const { b32, fail, revert, send, snapshot, want, mine } = require('minihat')
 const { bounds } = require('./bounds')
 const lib = require('../dmap.js')
-const {expectEvent, check_gas} = require("./utils/helpers");
+const {expectEvent, check_gas, check_entry} = require("./utils/helpers");
 const constants = ethers.constants
 
 describe('freezone', ()=>{
@@ -48,6 +48,7 @@ describe('freezone', ()=>{
         want(await freezone.dmap()).to.eql(dmap.address)
         want(await freezone.last()).to.eql(constants.Zero)
         want(await freezone.controllers(name)).to.eql(constants.AddressZero)
+        await check_entry(dmap, freezone.address, name, constants.HashZero, constants.HashZero)
     })
 
     it('set without control', async ()=>{
@@ -56,17 +57,12 @@ describe('freezone', ()=>{
 
     it('set after take', async ()=>{
         await send(freezone.take, name)
+        await check_entry(dmap, freezone.address, name, constants.HashZero, constants.HashZero)
         await send(freezone.set, name, open, data1)
-        const [res_meta, res_data] = await dmap.get(freezone.address, name)
-
-        want(ethers.utils.hexlify(data1)).eq(res_data)
-        want(ethers.utils.hexlify(open)).eq(res_meta)
+        await check_entry(dmap, freezone.address, name, open, data1)
 
         await send(freezone.set, name, lock, data2)
-        const [res_meta_2, res_data_2] = await dmap.get(freezone.address, name)
-
-        want(ethers.utils.hexlify(data2)).eq(res_data_2)
-        want(ethers.utils.hexlify(lock)).eq(res_meta_2)
+        await check_entry(dmap, freezone.address, name, lock, data2)
 
         await fail('LOCK', freezone.set, name, lock, data1)
         await fail('LOCK', freezone.set, name, open, data1)
@@ -75,14 +71,12 @@ describe('freezone', ()=>{
     it('sets after give', async ()=>{
         await send(freezone.take, name)
         await send(freezone.give, name, BOB)
+        await check_entry(dmap, freezone.address, name, constants.HashZero, constants.HashZero)
 
         await fail('ERR_OWNER', freezone.set, name, lock, data1)
 
         await send(freezone.connect(bob).set, name, lock, data1)
-        const [res_meta, res_data] = await dmap.connect(bob).get(freezone.address, name)
-
-        want(ethers.utils.hexlify(data1)).eq(res_data)
-        want(ethers.utils.hexlify(lock)).eq(res_meta)
+        await check_entry(dmap, freezone.address, name, lock, data1)
     })
 
     it('take taken', async ()=>{
@@ -92,6 +86,7 @@ describe('freezone', ()=>{
         await fail('ERR_TAKEN', freezone.connect(bob).take, name)
 
         await send(freezone.give, name, BOB)
+        await check_entry(dmap, freezone.address, name, constants.HashZero, constants.HashZero)
 
         await fail('ERR_TAKEN', freezone.take, name)
         await fail('ERR_TAKEN', freezone.connect(cat).take, name)

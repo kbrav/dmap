@@ -1,8 +1,12 @@
 const ebnf = require('ebnf')
 const multiformats = require('multiformats')
+const {ethers} = require("hardhat");
 const prefLenIndex = 2
 const fail =s=> { throw new Error(s) }
 const need =(b,s)=> b || fail(s)
+
+const keccak256 = ethers.utils.keccak256
+const coder = ethers.utils.defaultAbiCoder
 
 module.exports = lib = {}
 
@@ -31,7 +35,8 @@ lib.walk = async (dmap, path) => {
             fail(`zero register`)
         }
         const fullname = '0x' + lib._strToHex(step.name) + '00'.repeat(32-step.name.length);
-        [meta, data] = await dmap.get(zone, fullname)
+        const slot = keccak256(coder.encode(["address", "bytes32"], [zone, fullname]));
+        [meta, data] = await dmap.pair(slot)
         if (step.locked) {
             need(ctx.locked, `Encountered ':' in unlocked subpath`)
             need((lib._hexToArrayBuffer(meta)[0] & lib.FLAG_LOCK) !== 0, `Entry is not locked`)
